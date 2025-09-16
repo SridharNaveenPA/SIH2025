@@ -1,5 +1,7 @@
 from ortools.sat.python import cp_model
 from prettytable import PrettyTable
+import csv
+from datetime import datetime
 
 # === INPUT DATA ===
 
@@ -148,6 +150,75 @@ if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         x_table.align[field] = "c"
 
     print(x_table)
+
+    # === CSV EXPORT ===
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"timetable_{timestamp}.csv"
+    
+    # Write to CSV file
+    with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write header
+        writer.writerow(headers)
+        
+        # Write data rows
+        for row in table_data:
+            # Replace newlines with semicolons for better CSV compatibility
+            csv_row = []
+            for cell in row:
+                if isinstance(cell, str) and '\n' in cell:
+                    csv_row.append(cell.replace('\n', '; '))
+                else:
+                    csv_row.append(cell)
+            writer.writerow(csv_row)
+    
+    print(f"\n✅ Timetable successfully exported to: {csv_filename}")
+    
+    # Also create a detailed CSV with separate entries for each class
+    detailed_csv_filename = f"timetable_detailed_{timestamp}.csv"
+    
+    with open(detailed_csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write detailed header
+        writer.writerow(['Day', 'Period', 'Course', 'Faculty', 'Room', 'Day_Number', 'Period_Number'])
+        
+        # Write detailed data
+        for day in range(days):
+            for period in range(slots_per_day):
+                cell_entries = timetable[day][period]
+                if cell_entries:
+                    for entry in cell_entries:
+                        # Parse the entry to extract course, faculty, and room
+                        parts = entry.split(' (')
+                        course = parts[0]
+                        faculty_room = parts[1].rstrip(')')
+                        faculty, room = faculty_room.split(', ')
+                        
+                        writer.writerow([
+                            f"Day {day + 1}",
+                            f"P{period + 1}",
+                            course,
+                            faculty,
+                            room,
+                            day + 1,
+                            period + 1
+                        ])
+                else:
+                    writer.writerow([
+                        f"Day {day + 1}",
+                        f"P{period + 1}",
+                        "Free",
+                        "",
+                        "",
+                        day + 1,
+                        period + 1
+                    ])
+    
+    print(f"✅ Detailed timetable successfully exported to: {detailed_csv_filename}")
 
     # Print summary
     print("\n=== SUMMARY ===")
