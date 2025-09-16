@@ -1,4 +1,5 @@
 from ortools.sat.python import cp_model
+from prettytable import PrettyTable
 
 # === INPUT DATA ===
 
@@ -7,20 +8,54 @@ slots_per_day = 8
 total_slots = days * slots_per_day  # 40 time slots
 
 rooms = ['R1', 'R2', 'R3']
-courses = ['AI', 'ML', 'Math', 'B.Ed_Psych', 'ITEP']
+
+courses = [
+    'AI', 'ML', 'Math', 'B.Ed_Psych', 'ITEP',
+    'DBMS', 'OS', 'Networking', 'English', 'Physics'
+]
+
 faculty = {
     'AI': 'Dr.A',
     'ML': 'Dr.B',
     'Math': 'Dr.C',
     'B.Ed_Psych': 'Dr.D',
-    'ITEP': 'Dr.E'
+    'ITEP': 'Dr.E',
+    'DBMS': 'Dr.F',
+    'OS': 'Dr.G',
+    'Networking': 'Dr.H',
+    'English': 'Dr.I',
+    'Physics': 'Dr.J'
 }
 
-shared_students = [('AI', 'ML'), ('Math', 'B.Ed_Psych')]
+# Shared students (no overlap constraint)
+shared_students = [
+    ('AI', 'ML'),
+    ('Math', 'B.Ed_Psych'),
+    ('DBMS', 'OS'),
+    ('Networking', 'OS'),
+    ('English', 'Physics')
+]
 
+# Faculty unavailability
 faculty_unavailability = {
-    'Dr.A': list(range(0, 4)),
-    'Dr.C': [10, 11],
+    'Dr.A': list(range(0, 4)),   # Dr.A not free in first half of Day 1
+    'Dr.C': [10, 11],            # Dr.C not free in middle slots
+    'Dr.G': [20, 21, 22],        # Dr.G has other commitments
+    'Dr.I': [30, 31, 32, 33]     # Dr.I unavailable last day
+}
+
+# Minimum lectures per course per week
+course_min_lectures = {
+    'AI': 3,
+    'ML': 3,
+    'Math': 3,
+    'DBMS': 3,
+    'OS': 3,
+    'Networking': 2,
+    'English': 2,
+    'Physics': 2,
+    'B.Ed_Psych': 2,
+    'ITEP': 2
 }
 
 room_indices = range(len(rooms))
@@ -45,23 +80,18 @@ for t in time_slots:
     for r in room_indices:
         model.AddAtMostOne(x[c, t, r] for c in course_indices)
 
-# 2. Each time slot must be used (i.e., scheduled with some course in some room)
-#    (Optional: You could force a fixed number of time slots per course if desired)
-for t in time_slots:
-    model.Add(sum(x[c, t, r] for c in course_indices for r in room_indices) >= 1)
-
-# 3. A course can't be in two rooms at the same time
+# 2. A course can't be in two rooms at the same time
 for c in course_indices:
     for t in time_slots:
         model.AddAtMostOne(x[c, t, r] for r in room_indices)
 
-# 4. Faculty cannot be in more than one place at the same time
+# 3. Faculty cannot be in more than one place at the same time
 for t in time_slots:
     for f in set(faculty.values()):
         relevant_courses = [c for c in course_indices if faculty[courses[c]] == f]
         model.AddAtMostOne(x[c, t, r] for c in relevant_courses for r in room_indices)
 
-# 5. Faculty unavailability
+# 4. Faculty unavailability
 for c in course_indices:
     f_name = faculty[courses[c]]
     if f_name in faculty_unavailability:
@@ -69,7 +99,7 @@ for c in course_indices:
             for r in room_indices:
                 model.Add(x[c, t, r] == 0)
 
-# 6. Shared students – no overlap
+# 5. Shared students – no overlap
 for (course1, course2) in shared_students:
     i = courses.index(course1)
     j = courses.index(course2)
@@ -80,6 +110,12 @@ for (course1, course2) in shared_students:
             <= 1
         )
 
+# 6. Each course must be scheduled multiple times per week
+for c in course_indices:
+    cname = courses[c]
+    min_lectures = course_min_lectures[cname]
+    model.Add(sum(x[c, t, r] for t in time_slots for r in room_indices) >= min_lectures)
+
 # === SOLVER ===
 
 solver = cp_model.CpSolver()
@@ -87,44 +123,47 @@ solver.parameters.max_time_in_seconds = 30
 status = solver.Solve(model)
 
 # === OUTPUT ===
-# === FORMATTED TABLE OUTPUT ===
-
-from collections import defaultdict
 
 if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-    # Create a structure to hold timetable: day → period → list of (course, faculty, room)
-    timetable = defaultdict(lambda: defaultdict(list))
+    # Initialize timetable grid: days × slots
+    timetable = [[[] for _ in range(slots_per_day)] for _ in range(days)]
 
-    for t in time_slots:
-        day = t // slots_per_day + 1
-        period = t % slots_per_day + 1
-        for c in course_indices:
+    for c in course_indices:
+        for t in time_slots:
             for r in room_indices:
                 if solver.Value(x[c, t, r]) == 1:
-                    cname = courses[c]
-                    fname = faculty[cname]
-                    rname = rooms[r]
-                    entry = f"{cname} ({fname}, {rname})"
-                    timetable[day][period].append(entry)
+                    day = t // slots_per_day
+                    period = t % slots_per_day
+                    course_name = courses[c]
+                    faculty_name = faculty[course_name]
+                    room_name = rooms[r]
+                    timetable[day][period].append(f"{course_name} ({faculty_name}, {room_name})")
 
-    # Print table header
-    print("📅 Weekly Timetable (Rows = Days, Columns = Periods)")
-    print("=" * 100)
-    header = ["Day/Period"] + [f"P{p}" for p in range(1, 9)]
-    print(" | ".join(f"{h:^20s}" for h in header))
-    print("-" * 100)
+    # Prepare PrettyTable
+    headers = ["Day/Period"] + [f"P{p}" for p in range(1, slots_per_day + 1)]
+    table_data = []
 
-    # Print each day
-    for day in range(1, days + 1):
-        row = [f"Day {day}"]
-        for period in range(1, slots_per_day + 1):
+    for day in range(days):
+        row = [f"Day {day + 1}"]
+        for period in range(slots_per_day):
             cell_entries = timetable[day][period]
             if cell_entries:
                 cell_text = "\n".join(cell_entries)
             else:
                 cell_text = "Free"
             row.append(cell_text)
-        print(" | ".join(f"{cell:^20s}" for cell in row))
-        print("-" * 100)
+        table_data.append(row)
+
+    x_table = PrettyTable()
+    x_table.field_names = headers
+
+    for row in table_data:
+        x_table.add_row(row)
+
+    for field in headers:
+        x_table.align[field] = "c"
+
+    print(x_table)
+
 else:
     print("❌ No feasible timetable found.")
