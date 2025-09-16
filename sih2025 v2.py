@@ -186,39 +186,6 @@ if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         # Write detailed header
         writer.writerow(['Day', 'Period', 'Course', 'Faculty', 'Room', 'Day_Number', 'Period_Number'])
         
-        # Write detailed data
-        for day in range(days):
-            for period in range(slots_per_day):
-                cell_entries = timetable[day][period]
-                if cell_entries:
-                    for entry in cell_entries:
-                        # Parse the entry to extract course, faculty, and room
-                        parts = entry.split(' (')
-                        course = parts[0]
-                        faculty_room = parts[1].rstrip(')')
-                        faculty, room = faculty_room.split(', ')
-                        
-                        writer.writerow([
-                            f"Day {day + 1}",
-                            f"P{period + 1}",
-                            course,
-                            faculty,
-                            room,
-                            day + 1,
-                            period + 1
-                        ])
-                else:
-                    writer.writerow([
-                        f"Day {day + 1}",
-                        f"P{period + 1}",
-                        "Free",
-                        "",
-                        "",
-                        day + 1,
-                        period + 1
-                    ])
-    
-    print(f"✅ Detailed timetable successfully exported to: {detailed_csv_filename}")
 
     # Print summary
     print("\n=== SUMMARY ===")
@@ -234,3 +201,4 @@ if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
 
 else:
     print("❌ No feasible timetable found.")
+
