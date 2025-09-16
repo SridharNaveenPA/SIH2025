@@ -36,14 +36,6 @@ shared_students = [
     ('English', 'Physics')
 ]
 
-# Faculty unavailability
-faculty_unavailability = {
-    'Dr.A': list(range(0, 4)),   # Dr.A not free in first half of Day 1
-    'Dr.C': [10, 11],            # Dr.C not free in middle slots
-    'Dr.G': [20, 21, 22],        # Dr.G has other commitments
-    'Dr.I': [30, 31, 32, 33]     # Dr.I unavailable last day
-}
-
 # Minimum lectures per course per week
 course_min_lectures = {
     'AI': 3,
@@ -71,7 +63,7 @@ x = {}
 for c in course_indices:
     for t in time_slots:
         for r in room_indices:
-            x[c, t, r] = model.NewBoolVar(f'x_{c}_{t}_{r}')
+            x[c, t, r] = model.NewBoolVar(f'x_{c}{t}{r}')
 
 # === CONSTRAINTS ===
 
@@ -91,15 +83,7 @@ for t in time_slots:
         relevant_courses = [c for c in course_indices if faculty[courses[c]] == f]
         model.AddAtMostOne(x[c, t, r] for c in relevant_courses for r in room_indices)
 
-# 4. Faculty unavailability
-for c in course_indices:
-    f_name = faculty[courses[c]]
-    if f_name in faculty_unavailability:
-        for t in faculty_unavailability[f_name]:
-            for r in room_indices:
-                model.Add(x[c, t, r] == 0)
-
-# 5. Shared students – no overlap
+# 4. Shared students – no overlap
 for (course1, course2) in shared_students:
     i = courses.index(course1)
     j = courses.index(course2)
@@ -110,7 +94,7 @@ for (course1, course2) in shared_students:
             <= 1
         )
 
-# 6. Each course must be scheduled multiple times per week
+# 5. Each course must be scheduled multiple times per week
 for c in course_indices:
     cname = courses[c]
     min_lectures = course_min_lectures[cname]
@@ -164,6 +148,18 @@ if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         x_table.align[field] = "c"
 
     print(x_table)
+
+    # Print summary
+    print("\n=== SUMMARY ===")
+    total_lectures = 0
+    for c in course_indices:
+        course_name = courses[c]
+        lectures_scheduled = sum(solver.Value(x[c, t, r]) for t in time_slots for r in room_indices)
+        total_lectures += lectures_scheduled
+        print(f"{course_name}: {lectures_scheduled} lectures (min: {course_min_lectures[course_name]})")
+    
+    print(f"\nTotal lectures scheduled: {total_lectures}")
+    print(f"Total available slots: {len(rooms) * total_slots}")
 
 else:
     print("❌ No feasible timetable found.")
